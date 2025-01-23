@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "device.h"
 #include "kernel.h"
 #include "matrix.h"
+#include "device.h"
 
 #define CHECK_ERR(err, msg)                           \
     if (err != CL_SUCCESS)                            \
@@ -42,6 +42,10 @@ void initializeOpenCL(cl_device_id* device_id, cl_context* context, cl_command_q
 }
 
 void callVectorAdd2Kernel(Matrix* a, Matrix* b, Matrix* out, cl_context* context, cl_command_queue* queue) {
+    //printf("in vectoradd2kernel\n");
+    //a, b, out are all cpu 
+    //everything else that we allocate are on gpu 
+
     // OpenCL objects
     cl_program program;                 // program
     cl_kernel kernel;         // kernel
@@ -76,6 +80,7 @@ void callVectorAdd2Kernel(Matrix* a, Matrix* b, Matrix* out, cl_context* context
                               &err);
     CHECK_ERR(err, "clCreateBuffer a");
 
+    //like malloc which allocates space for us
     device_input_2 = clCreateBuffer(*context,
                               CL_MEM_READ_ONLY,
                               b->shape[0] * b->shape[1] * sizeof(int),
@@ -91,11 +96,20 @@ void callVectorAdd2Kernel(Matrix* a, Matrix* b, Matrix* out, cl_context* context
     CHECK_ERR(err, "clCreateBuffer out");
 
     //@@ Copy memory to the GPU here
+    //todo: 1. copy the input data to the device, using device_input_1 and device_input_2
+    //does each device_input_1 contain one matrix?
+    //printf ("======ENQUEUEWRITEBUFFER===== \n");
+    clEnqueueWriteBuffer(*queue, device_input_1, CL_FALSE, 0, sizeof(int) * a->shape[0], a->data, 0, NULL, NULL);
+    clEnqueueWriteBuffer(*queue, device_input_2, CL_FALSE, 0, sizeof(int) * b->shape[0], b->data, 0, NULL, NULL);
+
 
     //@@ define local and global work sizes
-    unsigned int size_a = 0; // @@ replace this with length of the input vector(s)
+    //todo:defines size of the ND range kernel, 1 dimensional and == to size of vector
+    // size as in memory? or size as in dimensions? for the matrix --> number of elements not the memory size 
+    // do we need size_b as well for that matrix? --> same as size_b
+    unsigned int size_a = a->shape[0]; 
 
-    // Set the arguments to the kernel
+    // Set the arguments to the kernel alr done for us
     err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &device_input_1);
     CHECK_ERR(err, "clSetKernelArg 0");
     err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &device_input_2);
@@ -106,10 +120,32 @@ void callVectorAdd2Kernel(Matrix* a, Matrix* b, Matrix* out, cl_context* context
     CHECK_ERR(err, "clSetKernelArg 3");
 
     //@@ Launch the GPU Kernel here
+    // todo: 1. set the dimensions for the NDRange
+    // todo: 2. enqueue the kernel
+    // size_t global_work_size[2] if it was a 2d work group and then assign each element 
+    // global_work_size[0] = 10, global_work_size[1] = 2 so num work items = 20
+    //device output buffer has the solution from kernel code 
+    //calls the kernel and runs the func
+
+    global_item_size = a->shape[0]; 
+    //printf ("======ND_RANGE_KERNEL===== \n");
+    clEnqueueNDRangeKernel(*queue, kernel, 1, NULL, &global_item_size, NULL, 0, NULL, NULL);   
 
     //@@ Copy the GPU memory back to the CPU here
+    //device_output = GPU and out = CPU
+    // todo: output is stored device_output copy back from gpu device memory using clenqueue read buffer
+    clEnqueueReadBuffer(*queue, device_output, CL_TRUE, 0, a->shape[0] * sizeof(int), out->data, 0, NULL, NULL);
 
     //@@ Free the GPU memory here
+    // todo: 1. free the gpu
+    //? r the steps for add2kernel and add4kernel the same for set up?
+
+    //printf ("======FREEING DEVICE INPUTS/OUTPUTS BUFFERS===== \n");
+    clReleaseMemObject(device_input_1);
+    clReleaseMemObject(device_input_2);
+    clReleaseMemObject(device_output);
+
+   // printf ("======FREEING KERNEL===== \n");
 
     // Release Host Memory
     free(kernel_source);
@@ -119,15 +155,22 @@ void part1(Matrix* host_input_1, Matrix* host_input_2, Matrix* host_input_3, Mat
     // Start of program one
 
     // OpenCL objects
+    //CREATING CONTEXT & COMMAND QUEUE
     cl_device_id device_id;             // device ID
     cl_context context;                 // context
     cl_command_queue queue;             // command queue
 
     initializeOpenCL(&device_id, &context, &queue);
+    //printf("STARTING VECTORADD2KERNEL CALLS\n");
 
     callVectorAdd2Kernel(host_input_1, host_input_2, host_output, &context, &queue);
+   // printf("CALL 1 DONE\n");
+
     callVectorAdd2Kernel(host_output, host_input_3, host_output, &context, &queue);
+    //printf("CALL 2 DONE\n");
+
     callVectorAdd2Kernel(host_output, host_input_4, host_output, &context, &queue);
+    //printf("FINISHED VECTORADD2KERNEL CALLS\n");
 
     // Prints the results
     // for (unsigned int i = 0; i < host_output.shape[0] * host_output.shape[1]; i++)
@@ -136,15 +179,25 @@ void part1(Matrix* host_input_1, Matrix* host_input_2, Matrix* host_input_3, Mat
     // }
 
     // Check whether the answer matches the output
+
+    
     CheckMatrix(answer, host_output);
+    //printf("saving matrix\n");
     SaveMatrix(output_file, host_output);
 
     //@@ Release OpenCL objects here
+    //? do we also have to release the inputs and outputs?
+   // printf("RELEASING COMMAND QUEUE\n");
+    clReleaseContext(context); 
+    clReleaseCommandQueue(queue); 
+    //printf("RELEASING CONTEXT\n");
+   
+
 }
 
 void callVectorAdd4Kernel(Matrix* a, Matrix* b, Matrix* c, Matrix* d, Matrix* out, cl_context* context, cl_command_queue* queue) {
     // OpenCL objects
-    cl_program program;                 // program
+    cl_program program;       // program
     cl_kernel kernel;         // kernel
 
     // OpenCL setup variables
@@ -206,9 +259,14 @@ void callVectorAdd4Kernel(Matrix* a, Matrix* b, Matrix* c, Matrix* d, Matrix* ou
     CHECK_ERR(err, "clCreateBuffer out");
 
     //@@ Copy memory to the GPU here
+    clEnqueueWriteBuffer(*queue, device_input_1, CL_FALSE, 0, sizeof(int) * a->shape[0], a->data, 0, NULL, NULL);
+    clEnqueueWriteBuffer(*queue, device_input_2, CL_FALSE, 0, sizeof(int) * b->shape[0], b->data, 0, NULL, NULL);
+    clEnqueueWriteBuffer(*queue, device_input_3, CL_FALSE, 0, sizeof(int) * c->shape[0], c->data, 0, NULL, NULL);
+    clEnqueueWriteBuffer(*queue, device_input_4, CL_FALSE, 0, sizeof(int) * d->shape[0], d->data, 0, NULL, NULL);
+
 
     //@@ define local and global work sizes
-    unsigned int size_a = 0; // @@ replace this with length of the input vector(s)
+    unsigned int size_a = a->shape[0];// @@ replace this with sizeof(a)
 
     // Set the arguments to the kernel
     err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &device_input_1);
@@ -225,10 +283,18 @@ void callVectorAdd4Kernel(Matrix* a, Matrix* b, Matrix* c, Matrix* d, Matrix* ou
     CHECK_ERR(err, "clSetKernelArg 5");
 
     //@@ Launch the GPU Kernel here
+    global_item_size = a->shape[0];
+    clEnqueueNDRangeKernel(*queue, kernel, 1, NULL, &global_item_size, NULL, 0, NULL, NULL);   
 
     //@@ Copy the GPU memory back to the CPU here
+    clEnqueueReadBuffer(*queue, device_output, CL_TRUE, 0, a->shape[0] * sizeof(int), out->data, 0, NULL, NULL);
 
     //@@ Free the GPU memory here
+    clReleaseMemObject(device_input_1);
+    clReleaseMemObject(device_input_2);
+    clReleaseMemObject(device_input_3);
+    clReleaseMemObject(device_input_4);
+    clReleaseMemObject(device_output);
 
     // Release Host Memory
     free(kernel_source);
@@ -257,6 +323,8 @@ void part2(Matrix* host_input_1, Matrix* host_input_2, Matrix* host_input_3, Mat
     SaveMatrix(output_file, host_output);
 
     //@@ Release OpenCL objects here
+    //clReleaseCommandQueue(queue); 
+    clReleaseContext(context);    
 }
 
 int main(int argc, char *argv[])
@@ -302,9 +370,6 @@ int main(int argc, char *argv[])
     clock_t start, end;
     double cpu_time_used;
 
-
-    
-
     // =================================================================
     printf("==============Starting Program 1==============\n");
     start = clock();
@@ -315,9 +380,11 @@ int main(int argc, char *argv[])
     cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC * 1000; // Convert to milliseconds
 
     printf("Execution time: %.2fms\n", cpu_time_used);
-    printf("==============Finished Program 1==============\n");
+    //printf("==============Finished Program 1==============\n");
 
     // Cleanup and prepare for second program.
+   // printf("==============about to free data==============\n");
+
     free(host_output.data);
     host_output.data = (int *)calloc(sizeof(int), host_output.shape[0] * host_output.shape[1]);
 
