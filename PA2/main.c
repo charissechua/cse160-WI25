@@ -401,8 +401,6 @@ int main(int argc, char *argv[])
 
 
 
-
-
     // Release host memory
     free(host_input_1.data);
     free(host_input_2.data);
