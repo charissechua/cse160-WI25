@@ -46,11 +46,7 @@ void OpenCLMatrixMultiply(Matrix *input0, Matrix *input1, Matrix *result)
     CHECK_ERR(err, "clCreateContext");
 
     // Create a command queue
-# if __APPLE__
-    queue = clCreateCommandQueue(context, device_id, 0, &err);
-#else
     queue = clCreateCommandQueueWithProperties(context, device_id, 0, &err);
-#endif
     CHECK_ERR(err, "clCreateCommandQueueWithProperties");
 
     // Create the program from the source buffer
@@ -65,40 +61,9 @@ void OpenCLMatrixMultiply(Matrix *input0, Matrix *input1, Matrix *result)
     kernel = clCreateKernel(program, "matrixMultiply", &err);
     CHECK_ERR(err, "clCreateKernel");
 
-    //@@Allocate GPU memory here
-    device_a = clCreateBuffer(context,
-                              CL_MEM_READ_ONLY,
-                              input0->shape[0] * input0->shape[1] * sizeof(int),
-                              NULL,
-                              &err);
-    CHECK_ERR(err, "clCreateBuffer device a");
+    //@@ Allocate GPU memory here
 
-    device_b = clCreateBuffer(context,
-                              CL_MEM_READ_ONLY,
-                              input1->shape[0] * input1->shape[1] * sizeof(int),
-                              NULL,
-                              &err);
-    CHECK_ERR(err, "clCreateBuffer device b");
-
-    device_c = clCreateBuffer(context,
-                              CL_MEM_WRITE_ONLY,
-                              result->shape[0] * result->shape[1] * sizeof(int),
-                              NULL,
-                              &err);
-    CHECK_ERR(err, "clCreateBuffer device c");
-
-
-    // @@  Copy memory to the GPU here
-    // PrintMatrix(input0); 
-    // PrintMatrix(input1);
-
-    clEnqueueWriteBuffer(queue, device_a, CL_TRUE, 0, sizeof(int) * input0->shape[0] * input0->shape[1], input0->data, 0, NULL, NULL);
-    clEnqueueWriteBuffer(queue, device_b, CL_TRUE, 0, sizeof(int) * input1->shape[0] * input1->shape[1], input1->data, 0, NULL, NULL);
-    
-    // @@  define local and global work sizes
-    const size_t global_work_size[2] = {input0->shape[1], input1->shape[1]}; // OUTPUT [x,y] //! set to result matrix in the future
-    const size_t local_work_size[2] = {1,1}; // OUTPUT [x,y]
-
+    //@@ Copy memory to the GPU here
 
     // Set the arguments to our compute kernel
     // __global const int *A, __global const int *B, __global int *C,
@@ -124,19 +89,13 @@ void OpenCLMatrixMultiply(Matrix *input0, Matrix *input1, Matrix *result)
     err |= clSetKernelArg(kernel, 8, sizeof(unsigned int), &result->shape[1]);
     CHECK_ERR(err, "clSetKernelArg 8");
 
-    // @@  Launch the GPU Kernel here
-    clEnqueueNDRangeKernel(queue, kernel, 2, NULL, global_work_size, NULL, 0, NULL, NULL);   
+    // @@ define local and global work sizes
 
-    // @@  Copy the GPU memory back to the CPU here
-    clEnqueueReadBuffer(queue, device_c, CL_TRUE, 0, result->shape[0] * result->shape[1] * sizeof(int), result->data, 0, NULL, NULL);
-    
-    //PrintMatrix(&device_c);
-    //PrintMatrix(result->data);
-    // @@  Free the GPU memory here
-    clReleaseMemObject(device_a);
-    clReleaseMemObject(device_b);
-    clReleaseMemObject(device_c);
+    //@@ Launch the GPU Kernel here
 
+    //@@ Copy the GPU memory back to the CPU here
+
+    //@@ Free the GPU memory here
 }
 
 int main(int argc, char *argv[])
@@ -167,11 +126,8 @@ int main(int argc, char *argv[])
     CHECK_ERR(err, "LoadMatrix");
 
     int rows, cols;
-    // @@  Update these values for the output rows and cols of the output
-    // @@  Do not use the results from the answer matrix 
-
-    rows = host_a.shape[1];
-    cols = host_b.shape[1];
+    //@@ Update these values for the output rows and cols of the output
+    //@@ Do not use the results from the answer matrix
 
     // Allocate the memory for the target.
     host_c.shape[0] = rows;
@@ -182,17 +138,13 @@ int main(int argc, char *argv[])
     OpenCLMatrixMultiply(&host_a, &host_b, &host_c);
 
     // // Call to print the matrix
+    // PrintMatrix(&host_c);
 
     // Save the matrix
     SaveMatrix(input_file_d, &host_c);
 
     // Check the result of the matrix multiply
     CheckMatrix(&answer, &host_c);
-    //printf("their answer\n");
-    //PrintMatrix(&answer);
-    //printf("my answer: \n");
-    //PrintMatrix(&host_c);
-
 
     // Release host memory
     free(host_a.data);
