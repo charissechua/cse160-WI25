@@ -46,9 +46,13 @@ void OpenCLMatrixMultiply(Matrix *input0, Matrix *input1, Matrix *result)
     CHECK_ERR(err, "clCreateContext");
 
     // Create a command queue
-    queue = clCreateCommandQueueWithProperties(context, device_id, 0, &err);
-    CHECK_ERR(err, "clCreateCommandQueueWithProperties");
-
+    # if __APPLE__
+        queue = clCreateCommandQueue(context, device_id, 0, &err);
+    #else
+        queue = clCreateCommandQueueWithProperties(context, device_id, 0, &err);
+    #endif
+        CHECK_ERR(err, "clCreateCommandQueueWithProperties");
+        
     // Create the program from the source buffer
     program = clCreateProgramWithSource(context, 1, (const char **)&kernel_source, NULL, &err);
     CHECK_ERR(err, "clCreateProgramWithSource");
@@ -62,9 +66,31 @@ void OpenCLMatrixMultiply(Matrix *input0, Matrix *input1, Matrix *result)
     CHECK_ERR(err, "clCreateKernel");
 
     //@@ Allocate GPU memory here
+    device_a = clCreateBuffer(context,
+                              CL_MEM_READ_ONLY,
+                              input0->shape[0] * input0->shape[1] * sizeof(int),
+                              NULL,
+                              &err);
+    CHECK_ERR(err, "clCreateBuffer device a");
+
+    device_b = clCreateBuffer(context,
+                              CL_MEM_READ_ONLY,
+                              input1->shape[0] * input1->shape[1] * sizeof(int),
+                              NULL,
+                              &err);
+    CHECK_ERR(err, "clCreateBuffer device b");
+
+    device_c = clCreateBuffer(context,
+                              CL_MEM_WRITE_ONLY,
+                              result->shape[0] * result->shape[1] * sizeof(int),
+                              NULL,
+                              &err);
+    CHECK_ERR(err, "clCreateBuffer device c");
 
     //@@ Copy memory to the GPU here
-
+    clEnqueueWriteBuffer(queue, device_a, CL_TRUE, 0, sizeof(int) * input0->shape[0] * input0->shape[1], input0->data, 0, NULL, NULL);
+    clEnqueueWriteBuffer(queue, device_b, CL_TRUE, 0, sizeof(int) * input1->shape[0] * input1->shape[1], input1->data, 0, NULL, NULL);
+    
     // Set the arguments to our compute kernel
     // __global const int *A, __global const int *B, __global int *C,
     // const unsigned int numARows, const unsigned int numAColumns,
@@ -90,12 +116,28 @@ void OpenCLMatrixMultiply(Matrix *input0, Matrix *input1, Matrix *result)
     CHECK_ERR(err, "clSetKernelArg 8");
 
     // @@ define local and global work sizes
-
+    const int TILE_SIZE = 16; 
+    size_t local_work_size[2] = {TILE_SIZE, TILE_SIZE}; 
+    //total area size
+    //size_t global_work_size[2] = {result->shape[0], result->shape[1]}; //total size of output matrix
+    size_t global_work_rows = ((result->shape[0] + TILE_SIZE - 1) / TILE_SIZE) * TILE_SIZE;
+    size_t global_work_cols = ((result->shape[1] + TILE_SIZE - 1) / TILE_SIZE) * TILE_SIZE;
+    size_t global_work_size[2] = {global_work_rows, global_work_cols};
     //@@ Launch the GPU Kernel here
+    clEnqueueNDRangeKernel(queue, kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);   
 
     //@@ Copy the GPU memory back to the CPU here
+    clEnqueueReadBuffer(queue, device_c, CL_TRUE, 0, result->shape[0] * result->shape[1] * sizeof(int), result->data, 0, NULL, NULL);
 
     //@@ Free the GPU memory here
+    clReleaseMemObject(device_a);
+    clReleaseMemObject(device_b);
+    clReleaseMemObject(device_c);
+
+    clReleaseKernel(kernel); 
+    // clReleaseProgram(program); 
+    // clReleaseCommandQueue(queue); 
+    // clReleaseContext(context);
 }
 
 int main(int argc, char *argv[])
@@ -128,6 +170,8 @@ int main(int argc, char *argv[])
     int rows, cols;
     //@@ Update these values for the output rows and cols of the output
     //@@ Do not use the results from the answer matrix
+    rows = host_a.shape[0];
+    cols = host_b.shape[1];
 
     // Allocate the memory for the target.
     host_c.shape[0] = rows;
