@@ -23,6 +23,7 @@
 
 void OpenCLConvolution2D(Image *input0, Matrix *input1, Image *result, int stride)
 {
+    //? input0 is iag
     // Load external OpenCL kernel code
     char *kernel_source = OclLoadKernel(KERNEL_PATH); // Load kernel source
 
@@ -53,8 +54,13 @@ void OpenCLConvolution2D(Image *input0, Matrix *input1, Image *result, int strid
     CHECK_ERR(err, "clCreateContext");
 
     // Create a command queue
-    queue = clCreateCommandQueueWithProperties(context, device_id, 0, &err);
-    CHECK_ERR(err, "clCreateCommandQueueWithProperties");
+    # if __APPLE__
+        queue = clCreateCommandQueue(context, device_id, 0, &err);
+    #else
+        queue = clCreateCommandQueueWithProperties(context, device_id, 0, &err);
+    #endif
+        CHECK_ERR(err, "clCreateCommandQueueWithProperties");
+        
 
     // Create the program from the source buffer
     program = clCreateProgramWithSource(context, 1, (const char **)&kernel_source, NULL, &err);
@@ -69,8 +75,34 @@ void OpenCLConvolution2D(Image *input0, Matrix *input1, Image *result, int strid
     CHECK_ERR(err, "clCreateKernel");
 
     //@@ Allocate GPU memory here
+    device_a = clCreateBuffer(context,
+                              CL_MEM_READ_ONLY,
+                              input0->shape[0] * input0->shape[1] * IMAGE_CHANNELS * sizeof(int),
+                              NULL,
+                              &err);
+    CHECK_ERR(err, "clCreateBuffer device a");
+
+    device_b = clCreateBuffer(context,
+                              CL_MEM_READ_ONLY,
+                              input1->shape[0] * input1->shape[1] * sizeof(int),
+                              NULL,
+                              &err);
+    CHECK_ERR(err, "clCreateBuffer device b");
+
+    device_c = clCreateBuffer(context,
+                              CL_MEM_WRITE_ONLY,
+                              result->shape[0] * result->shape[1] * IMAGE_CHANNELS * sizeof(int),
+                              NULL,
+                              &err);
+    CHECK_ERR(err, "clCreateBuffer device c");
+
 
     //@@ Copy memory to the GPU here
+    err = clEnqueueWriteBuffer(queue, device_a, CL_TRUE, 0, sizeof(int) * input0->shape[0] * input0->shape[1] * IMAGE_CHANNELS, input0->data, 0, NULL, NULL);
+    CHECK_ERR(err, "writing fgor input 1");
+
+    err = clEnqueueWriteBuffer(queue, device_b, CL_TRUE, 0, sizeof(int) * input1->shape[0] * input1->shape[1], input1->data, 0, NULL, NULL);
+    CHECK_ERR(err, "writing fgor input 1");
 
     // Set the arguments to our compute kernel
     // __global float * inputData, __global float * outputData, __constant float * maskData,
@@ -96,17 +128,26 @@ void OpenCLConvolution2D(Image *input0, Matrix *input1, Image *result, int strid
     // Compute the output dim 
     // @@ define local and global work sizes
     // Execute the OpenCL kernel on the list
-    
-    
+    //? size of the entire output matrix which is the size of the input matrix 
+    //? is gloabl work size supposed to have 3 dimensions?
+    size_t global_work_size[3] = {result->shape[0], result->shape[1], result->shape[3]}; 
+    // TODO local_work_size size_t local_work_size [2] = = {TILE_SIZE, TILE_SIZE}; 
     //@@ Launch the GPU Kernel here
     // Execute the OpenCL kernel on the array
-
-
+    err = clEnqueueNDRangeKernel(queue, kernel, 2, NULL, global_work_size, NULL, 0, NULL, NULL);   
+    CHECK_ERR(err , "Kernel run");
     //@@ Copy the GPU memory back to the CPU here
     // Read the memory buffer output_mem_obj to the local variable result
-    
+    err = clEnqueueReadBuffer(queue, device_c, CL_TRUE, 0, result->shape[0] * result->shape[1] * IMAGE_CHANNELS * sizeof(int), result->data, 0, NULL, NULL);
+    CHECK_ERR(err , "Kernel run");
+
     //@@ Free the GPU memory here
     // Release OpenCL resources
+    clReleaseMemObject(device_a);
+    clReleaseMemObject(device_b);
+    clReleaseMemObject(device_c);
+
+    clReleaseKernel(kernel); 
 }
 
 int main(int argc, char *argv[])
@@ -150,7 +191,8 @@ int main(int argc, char *argv[])
     int rows, cols;
     //@@ Update these values for the output rows and cols of the output
     //@@ Do not use the results from the answer image
-    
+    rows = host_a.shape[0] - (host_b.shape[0] - 1); 
+    cols = host_a.shape[1] - (host_b.shape[1] - 1); 
     
     // Allocate the memory for the target.
     host_c.shape[0] = rows;
@@ -158,7 +200,10 @@ int main(int argc, char *argv[])
     host_c.data = (int *)malloc(sizeof(int) * host_c.shape[0] * host_c.shape[1] * IMAGE_CHANNELS);
 
     OpenCLConvolution2D(&host_a, &host_b, &host_c, stride);
-
+    // printf("MY OUTPUT\n:");
+    // PrintMatrix(&host_c);
+    // printf("ANSWER \n:");
+    // PrintMatrix(&answer);
     // Save the image
     SaveImg(input_file_d, &host_c);
 
