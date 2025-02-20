@@ -129,8 +129,8 @@ void OpenCLConvolution2D(Image *input0, Matrix *input1, Image *result, int strid
     // @@ define local and global work sizes
     // Execute the OpenCL kernel on the list
     //? size of the entire output matrix which is the size of the input matrix 
-    //? is gloabl work size supposed to have 3 dimensions?
-    size_t global_work_size[3] = {result->shape[0], result->shape[1], result->shape[3]}; 
+    size_t global_work_size[2] = {result->shape[1], result->shape[0]}; 
+    printf("My Result dimensions: (%d, %d, %d)", result->shape[0], result->shape[1], result->shape[2]);
     // TODO local_work_size size_t local_work_size [2] = = {TILE_SIZE, TILE_SIZE}; 
     //@@ Launch the GPU Kernel here
     // Execute the OpenCL kernel on the array
@@ -146,7 +146,6 @@ void OpenCLConvolution2D(Image *input0, Matrix *input1, Image *result, int strid
     clReleaseMemObject(device_a);
     clReleaseMemObject(device_b);
     clReleaseMemObject(device_c);
-
     clReleaseKernel(kernel); 
 }
 
@@ -197,6 +196,7 @@ int main(int argc, char *argv[])
     // Allocate the memory for the target.
     host_c.shape[0] = rows;
     host_c.shape[1] = cols;
+    host_c.shape[2] = host_a.shape[2]; //? do we need to set for image channels?
     host_c.data = (int *)malloc(sizeof(int) * host_c.shape[0] * host_c.shape[1] * IMAGE_CHANNELS);
 
     OpenCLConvolution2D(&host_a, &host_b, &host_c, stride);
