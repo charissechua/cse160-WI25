@@ -190,8 +190,8 @@ int main(int argc, char *argv[])
     int rows, cols;
     //@@ Update these values for the output rows and cols of the output
     //@@ Do not use the results from the answer image
-    rows = host_a.shape[0] - (host_b.shape[0] - 1); 
-    cols = host_a.shape[1] - (host_b.shape[1] - 1); 
+    rows = (host_a.shape[0] - (host_b.shape[0] - 1))/stride; 
+    cols = (host_a.shape[1] - (host_b.shape[1] - 1))/stride; 
     
     // Allocate the memory for the target.
     host_c.shape[0] = rows;
