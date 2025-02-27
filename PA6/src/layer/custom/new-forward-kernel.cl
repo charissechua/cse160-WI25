@@ -11,17 +11,50 @@ __kernel void prefn_marker_kernel() {
     tx = tx + 1;
 }
 
-
-
-__kernel void conv_forward_kernel(__global float *y, __constant float *x, __constant float *k, const int B, const int M, const int C, const int H, const int W, const int K)
+__kernel void conv_forward_kernel(__global float *y, __constant float *x,
+    __constant float *k, const int B, const int M, const int C, const int H, 
+    const int W, const int K)
 {
-#define y4d(i3, i2, i1, i0) y[(i3) * (M * H_out * W_out) + (i2) * (H_out * W_out) + (i1) * (W_out) + i0]
-#define x4d(i3, i2, i1, i0) x[(i3) * (C * H * W) + (i2) * (H * W) + (i1) * (W) + i0]
-#define k4d(i3, i2, i1, i0) k[(i3) * (C * K * K) + (i2) * (K * K) + (i1) * (K) + i0]
-
+     /**
+    y[b][m][h][w] += x[b][c][h + p][w + q] * k[m][c][p][q]
+     */
 	//@@ Insert code to implement convolution here
-
-#undef y4d
-#undef x4d
-#undef k4d
+    int H_out = H - K + 1;
+    int W_out = W - K + 1;
+    
+    int gid = get_global_id(0);
+    int w_out = gid % W_out;
+    gid /= W_out;
+    int h_out = gid % H_out;
+    gid /= H_out;
+    int m = gid % M;
+    int b = gid / M;
+    
+    float sum = 0.0f;
+    
+    for (int c = 0; c < C; c++) {
+        for (int p = 0; p < K; p++) {
+            for (int q = 0; q < K; q++) {
+                int h_in = h_out + p;
+                int w_in = w_out + q;
+                //x[b][c][h + p][w + q]
+                // [b] : b * (C * H * W) which batch we are in * size of each batch 
+                // [c] : c * (H * W) curr channel * size of each channel 
+                // [h + p] : h_in * W current "height" * Width of input offset to find row for which element within the part that is covered by the mask should be multiplied by the k input 
+                // [w + q] : w_in is just column
+                int x_index = b * (C * H * W) + c * (H * W) + h_in * W + w_in;
+               
+                // [m] : m * (C * K * K) = CURR output feature * total number of channels * size of mask 
+                // [c] : c * (K * K) = curr channel * size of mask 
+                // [p] : curr ROW of the mask with width K 
+                // [q] : col of the mask 
+                int k_index = m * (C * K * K) + c * (K * K) + p * K + q;
+                sum += x[x_index] * k[k_index];
+            }
+        }
+    }
+    
+    // Y [b, m, h, w] 
+    int y_index = b * (M * H_out * W_out) + m * (H_out * W_out) + h_out * W_out + w_out;
+    y[y_index] = sum;
 }

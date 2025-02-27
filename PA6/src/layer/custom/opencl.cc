@@ -38,9 +38,13 @@ void OpenCL::setup(cl_device_type device_type)
     CHECK_ERR(err, "clCreateContext");
 
     // Create a command queue
-    queue = clCreateCommandQueueWithProperties(context, device_id, 0, &err);
-    CHECK_ERR(err, "clCreateCommandQueueWithProperties");
-
+    # if __APPLE__
+        queue = clCreateCommandQueue(context, device_id, 0, &err);
+    #else
+        queue = clCreateCommandQueueWithProperties(context, device_id, 0, &err);
+    #endif
+        CHECK_ERR(err, "clCreateCommandQueueWithProperties");
+        
     // Create the program from the source buffer
     program = clCreateProgramWithSource(context, 1, (const char **)&kernel_source, nullptr, &err);
     CHECK_ERR(err, "clCreateProgramWithSource");
