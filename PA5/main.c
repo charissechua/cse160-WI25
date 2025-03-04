@@ -17,6 +17,7 @@
     }
 
 #define KERNEL_PATH "kernel.cl"
+#define TILE_SIZE 7
 
 #define COMPUTE_OUTUT_DIM(input_dim, kernel_size, stride) \
     ((input_dim - kernel_size) / stride + 1)
@@ -128,13 +129,12 @@ void OpenCLConvolution2D(Image *input0, Matrix *input1, Image *result, int strid
     // Compute the output dim 
     // @@ define local and global work sizes
     // Execute the OpenCL kernel on the list
-    //? size of the entire output matrix which is the size of the input matrix 
     size_t global_work_size[2] = {result->shape[1], result->shape[0]}; 
     printf("My Result dimensions: (%d, %d, %d)", result->shape[0], result->shape[1], result->shape[2]);
-    // TODO local_work_size size_t local_work_size [2] = = {TILE_SIZE, TILE_SIZE}; 
+    size_t local_work_size [2] = {TILE_SIZE, TILE_SIZE}; 
     //@@ Launch the GPU Kernel here
     // Execute the OpenCL kernel on the array
-    err = clEnqueueNDRangeKernel(queue, kernel, 2, NULL, global_work_size, NULL, 0, NULL, NULL);   
+    err = clEnqueueNDRangeKernel(queue, kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);   
     CHECK_ERR(err , "Kernel run");
     //@@ Copy the GPU memory back to the CPU here
     // Read the memory buffer output_mem_obj to the local variable result

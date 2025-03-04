@@ -108,11 +108,13 @@ void OpenCLInterface::conv_forward_opencl(cl_mem device_y, const cl_mem device_x
 
     //@@ Launch the OpenCL Kernel here
     // Execute the OpenCL kernel on the array
-    int H_out = H - K + 1; 
+    int H_out = H - K + 1;
     int W_out = W - K + 1;
-    size_t global_work_size [1] =  {B * M * H_out * W_out}; //todo: optimize w local size 
-    err = clEnqueueNDRangeKernel(this->opencl->queue, this->opencl->kernel, 1, NULL, global_work_size, NULL, 0, NULL, NULL);   
-    CHECK_ERR(err , "Kernel run");
+    size_t global_work_size[3] = { (size_t)W_out, (size_t)H_out, (size_t)(B * M) };
+    err = clEnqueueNDRangeKernel(this->opencl->queue, this->opencl->kernel,
+                                3, NULL, global_work_size, NULL, 0, NULL, NULL);
+    CHECK_ERR(err, "Kernel run");
+
 }
 
 void OpenCLInterface::conv_forward_opencl_epilog(float *host_y, cl_mem device_y, 
